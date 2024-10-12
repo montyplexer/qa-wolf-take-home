@@ -2,9 +2,9 @@
 
 QA Wolf Take-Home Coding Task
 
+This repo only contains the code segment of the assignment.
 
-
-Below are the instructions from QA Wolf:
+Below are the instructions directly from QA Wolf:
 
 # 🐺 QA Wolf Take Home Assignment
 
