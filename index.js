@@ -22,6 +22,9 @@
 const { chromium } = require("playwright");
 const { test, expect } = require("playwright/test");
 
+/**
+ * Test: The first 100 articles listed on Hacker News (https://news.ycombinator.com/newest) are sorted by newest.
+ */
 async function sortHackerNewsArticles() {
   // Open the webpage in the chromium browser
   const browser = await chromium.launch({ headless: false });
@@ -37,69 +40,76 @@ async function sortHackerNewsArticles() {
   // This is the timestamp of the most recently compared article
   let newest_timestamp = new Date();
 
-  // Open the Hacker News article listing, sorted by newest, starting at article index 1
-  await page.goto("https://news.ycombinator.com/newest?n="+article_index, { waitUntil: 'domcontentloaded' });
+  
 
+  // Open the Hacker News article listing, sorted by newest, starting at article index 1
+  await page.goto("https://news.ycombinator.com/newest", { waitUntil: 'domcontentloaded' });
   // Get a reference to the button that shows more articles
   // It is generally better to refer to a button by it's user-facing attributes, i.e. text instead of class name when possible
-  const more_button = page.locator('.morelink');
+  const more_button = await page.locator('.morelink');
   // There should only be exactly one "More" button
   await expect(more_button).toHaveCount(1);
 
   // Continue to validate timestamps on pages until we have checked the desired number of articles
   while (article_index <= num_of_articles_to_validate) {
-    console.log("Article Index: " + article_index);
-    
-    //await page.context().clearCookies();
-    /*await page.evaluate(() => {
-      localStorage.clear();
-      sessionStorage.clear();
-    });*/
 
-    // The site began to refuse my connection, so I will add randomized delay so that I am less likely to trigger refusal, and to mimic more natural browsing
-    let delay = Math.floor(Math.random() * 1000) + 500;
-    await page.waitForTimeout(delay);
+    // The site began to refuse my connection, so I will add randomized delay so that I am less likely to trigger refusal by mimicking more natural browsing
+    await page.waitForTimeout(random_delay(200,800));
 
-    // Go to Hacker News (sorted by newest, starting at article_index)
-    //await page.goto("https://news.ycombinator.com/newest?n="+article_index, { waitUntil: 'domcontentloaded' });
+    // Navigate to next page
     await more_button.click();
-    //page.waitForNavigation({ waitUntil: 'domcontentloaded' });
-    //page.waitForLoadState('networkidle')
-    //page.waitForURL()
+
+    // Additional delay
+    await page.waitForTimeout(random_delay(200,800));
+
+    // If the "More" button is not present, chances are the page did not load and the site refused to load the article list
+    // Since I do not control how the site is run, the best I can do is let the tester know how this test failed
+    if (await more_button.count() !== 1) {
+      console.log("========================================================================================");
+      console.log("Test failed! Next page did not load properly, did the site refuse to load the articles?");
+      console.log("========================================================================================");
+      console.log("");
+      console.log("[Page HTML]");
+      console.log(await page.content());
+      console.log("");
+      process.exit(-1);
+    }
     
-    // Add artificial delay because the website 
-    await page.waitForTimeout(1000);
-    
+    // Check that the needed elements for the test are loaded in and visible
     await page.waitForSelector('.age');
     await page.waitForSelector('.athing');
     await page.waitForSelector('.score');
 
+    // Get a reference to the article table
     let article_table = await page.locator('table').locator('table').nth(1);
 
     // Call page-level function 
-    [article_index, newest_timestamp] = await validateArticlesOnPage(page, article_index, num_of_articles_to_validate, newest_timestamp, article_table);
+    [article_index, newest_timestamp] = await validateArticlesOnPage(article_table, article_index, num_of_articles_to_validate, newest_timestamp);
     
   }
-  page.close();
   
+  // Test has concluded successfully, we can terminate without error
+  page.close();
+  console.log("========================================================================================");
   console.log("Test successful! Verified " + num_of_articles_to_validate + " articles are in newest order!");
+  console.log("========================================================================================");
 
+  //return true;
   process.exit(0);
 }
 
-/* Page-level function */
-async function validateArticlesOnPage(page, article_index, num_of_articles_to_validate, newest_timestamp, article_table) {
-
-  // Get reference to article table (which is the second subtable in "hnmain")
-  //const main_table = await page.locator('table');
-  //let article_table = await page.locator('table').locator('table').nth(1);
-  //await article_table.waitFor();
-  await page.waitForSelector('.age');
-  await page.waitForSelector('.athing');
-  await page.waitForSelector('.score');
+/**
+ * Page-level function called for each new url in this test
+ * @param {Locator} article_table locator pointing to table containing the articles
+ * @param {int} article_index keeps track of how many articles have been validated
+ * @param {int} num_of_articles_to_validate how many articles need to be validated for the entire test
+ * @param {Date} newest_timestamp should be newer than any of the articles on this page
+ * @returns an updated article_index and newest_timsetamp to be used for the next page
+ */
+async function validateArticlesOnPage(article_table, article_index, num_of_articles_to_validate, newest_timestamp) {
 
   // Retrieve timestamps using "age" class 
-  let article_ages = await page.locator('.age');
+  let article_ages = await article_table.locator('.age');
 
   // Retrieve article titles using class "athing"
   let article_athings = await article_table.locator('.athing');
@@ -112,18 +122,23 @@ async function validateArticlesOnPage(page, article_index, num_of_articles_to_va
   let count_athings = await article_athings.count();
   let count_scores = await article_scores.count();
   if (count_ages !== count_athings || count_ages !== count_scores) {
-    console.log("Failed to get an equal number of articles and timestamps on this page!");
+    console.log("========================================================================================");
+    console.log("Test failed! Could not get an equal number of articles and timestamps on this page!");
+    console.log("========================================================================================");
     exit(-1);
   }
 
-  console.log("================================================");
-  console.log("Most recent timestamp:       " + (newest_timestamp))
-  console.log("Article # start:             " + (article_index))
+  // New page and progress 
+  console.log("========================================================================================");
+  console.log("Most recent timestamp:       " + (newest_timestamp));
+  console.log("Article # start:             " + (article_index));
   console.log("Num of articles:             " + (count_athings));
   console.log("Num of timestamps:           " + (count_ages));
   console.log("Num of article IDs (score):  " + (count_scores));
-  console.log("================================================");
+  console.log("========================================================================================");
+  console.log("");
 
+  // The number of articles to check on this page is either the amount of articles loaded in or less
   let num_of_articles_to_check_on_page = Math.min(count_athings, num_of_articles_to_validate - article_index + 1);
 
   // Check that each article on this page is sorted by newest (using timestamp)
@@ -134,16 +149,19 @@ async function validateArticlesOnPage(page, article_index, num_of_articles_to_va
     let id = ( await article_scores.nth(i).getAttribute('id') ).substring(6);
     let timestamp = new Date( await article_ages.nth(i).getAttribute('title') );
     
-    // DEBUGGING: Article list page breakdown
+    // Article list page breakdown
     console.log(article_index + '. [' + timestamp + '] | ID:' + id + '\n"' + title + '"\n');
 
-    // DEBUGGING: Compare timestamps
-    console.log('Most recent: ' + newest_timestamp.toTimeString())
-    console.log('Current:     ' + timestamp.toTimeString() + '\n')
+    // Compare timestamps
+    console.log('Most recent: ' + newest_timestamp.toTimeString());
+    console.log('Current:     ' + timestamp.toTimeString() + '\n');
 
     // Test fails if the current timestamp is newer than (greater than) the most recently compared article
     if (timestamp > newest_timestamp) {
-      console.log("Failed test: articles are not in newest order!");
+      console.log("========================================================================================");
+      console.log("Test failed! Articles are not in newest order!");
+      console.log("========================================================================================");
+      console.log("");
       process.exit(-1);
     }
 
@@ -155,11 +173,21 @@ async function validateArticlesOnPage(page, article_index, num_of_articles_to_va
   }
 
   // Test passes for the current page
+  console.log("========================================================================================");
   console.log("Successfully checked page for newest order!");
+  console.log("========================================================================================");
+  console.log("");
 
-  return [article_index, newest_timestamp]
-
+  return [article_index, newest_timestamp];
 }
+
+/**
+ * Generates a value representing a delay in milliseconds.
+ * @param {int} ms_min_time minimum delay time in milliseconds
+ * @param {int} ms_range difference between the minimum delay time and maximum delay time in milliseconds
+ * @returns a randomized number representing a delay in milliseconds 
+ */
+function random_delay(ms_min_time,ms_range) { return ms_min_time + Math.floor(Math.random() * ms_range); }
 
 // Run sorting function on articles
 (async () => {
