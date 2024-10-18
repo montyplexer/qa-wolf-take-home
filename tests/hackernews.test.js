@@ -19,34 +19,80 @@
  */
 
 // Playwright dependencies
-const { chromium } = require("playwright");
-const { test, expect } = require("playwright/test");
+const { test, expect, chromium } = require("playwright/test");
+
+// =====================
+// ===== VARIABLES =====
+// =====================
+
+let browser;
+let context;
+let page;
+
+let more_button;
+let article_table;
+
+// Validate this many articles as part of the main test. Article list may be spread across several pages
+let num_of_articles_to_validate = 100;
+
+// ======================
+// ===== TEST SETUP =====
+// ======================
+
+test.beforeAll('Setting up test environment...', async () => {
+  browser = await chromium.launch({ headless: false });
+  context = await browser.newContext();
+  page = await context.newPage();
+  more_button = await page.locator('.morelink');
+  article_table = await page.locator('table').locator('table').nth(1);
+});
+
+test.beforeEach('Navigating to Hacker News newest...', async () => {
+  await page.goto("https://news.ycombinator.com/newest", { waitUntil: 'domcontentloaded' });
+  //await page.waitForTimeout(random_delay(1000,1000));
+});
+
+// =================
+// ===== TESTS =====
+// =================
+
+test('has "More" button', async ({page}) => {
+  // There should only be exactly one "More" button
+  await expect(more_button).toHaveCount(1);
+});
+
+test('can click "More" button', async ({page}) => {
+  // "More" button must be navigable
+  await more_button.click({ waitUntil: 'domcontentloaded' });
+});
+
+test('article table is present', async ({page}) => {
+  // There should only be exactly one article table
+  await expect(article_table).toHaveCount(1);
+});
+
+// Run sorting function on articles
+test('verify first 100 articles are sorted by newest', async ({page}) => {
+  await sortHackerNewsArticles();
+});
+
+// ============================
+// ===== HELPER FUNCTIONS =====
+// ============================
 
 /**
  * Test: The first 100 articles listed on Hacker News (https://news.ycombinator.com/newest) are sorted by newest.
  */
 async function sortHackerNewsArticles() {
-  // Open the webpage in the chromium browser
-  const browser = await chromium.launch({ headless: false });
-  let context = await browser.newContext();
-  let page = await context.newPage();
 
-  // Validate this many articles as part of the test. Article list may be spread across several pages
-  let num_of_articles_to_validate = 100;
+  
+  //let num_of_articles_to_validate = 100;
 
   // The index of the first article on a page
   let article_index = 1;
 
   // This is the timestamp of the most recently compared article
   let newest_timestamp = new Date();
-
-  // Open the Hacker News article listing, sorted by newest, starting at article index 1
-  await page.goto("https://news.ycombinator.com/newest", { waitUntil: 'domcontentloaded' });
-  // Get a reference to the button that shows more articles
-  // It is generally better to refer to a button by it's user-facing attributes, i.e. text instead of class name when possible
-  const more_button = await page.locator('.morelink');
-  // There should only be exactly one "More" button
-  await expect(more_button).toHaveCount(1);
 
   // Continue to validate timestamps on pages until we have checked the desired number of articles
   while (article_index <= num_of_articles_to_validate) {
@@ -72,7 +118,7 @@ async function sortHackerNewsArticles() {
       console.log("[Page HTML]");
       console.log(await page.content());
       console.log("");
-      process.exit(-1);
+      test.fail();
     }
     
     // Check that the needed elements for the test are loaded in and visible
@@ -81,7 +127,7 @@ async function sortHackerNewsArticles() {
     await page.waitForSelector('.score');
 
     // Get a reference to the article table
-    let article_table = await page.locator('table').locator('table').nth(1);
+    article_table = await page.locator('table').locator('table').nth(1);
 
     // Call page-level function 
     [article_index, newest_timestamp] = await validateArticlesOnPage(article_table, article_index, num_of_articles_to_validate, newest_timestamp);
@@ -95,7 +141,7 @@ async function sortHackerNewsArticles() {
   console.log("========================================================================================");
 
   //return true;
-  process.exit(0);
+  //process.exit(0);
 }
 
 /**
@@ -125,7 +171,7 @@ async function validateArticlesOnPage(article_table, article_index, num_of_artic
     console.log("========================================================================================");
     console.log("Test failed! Could not get an equal number of articles and timestamps on this page!");
     console.log("========================================================================================");
-    exit(-1);
+    test.fail();
   }
 
   // New page and progress 
@@ -162,7 +208,7 @@ async function validateArticlesOnPage(article_table, article_index, num_of_artic
       console.log("Test failed! Articles are not in newest order!");
       console.log("========================================================================================");
       console.log("");
-      process.exit(-1);
+      test.fail();
     }
 
     // Update timestamp
@@ -188,8 +234,3 @@ async function validateArticlesOnPage(article_table, article_index, num_of_artic
  * @returns a randomized number representing a delay in milliseconds 
  */
 function random_delay(ms_min_time,ms_range) { return ms_min_time + Math.floor(Math.random() * ms_range); }
-
-// Run sorting function on articles
-(async () => {
-  await sortHackerNewsArticles();
-})();

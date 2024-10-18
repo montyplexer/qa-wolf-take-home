@@ -4,10 +4,10 @@
 timestamp=$(date +"%Y-%m-%d_%H-%M-%S")
 
 # Create test output directory if it doesn't exist already
-mkdir -p "test-results"
+mkdir -p "logs"
 
 # Create log file name 
-log_file="test-results/test_verified_articles_$timestamp.log"
+log_file="logs/test_verified_articles_$timestamp.log"
 
 # Run NodeJS script and record console output to log file
 node index.js > "$log_file" 2>&1
