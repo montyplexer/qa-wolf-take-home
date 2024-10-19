@@ -71,8 +71,8 @@ test('article table is present', async ({page}) => {
   await expect(article_table).toHaveCount(1);
 });
 
-// Run sorting function on articles
 test('verify first 100 articles are sorted by newest', async ({page}) => {
+  // Run verify function on newest articles
   await sortHackerNewsArticles();
 });
 
@@ -112,13 +112,15 @@ async function sortHackerNewsArticles() {
     // Since I do not control how the site tests for abuse, the best I can do is let the tester know how this test failed
     if (await more_button.count() !== 1) {
       console.log("========================================================================================");
-      console.log("Test failed! Next page did not load properly, did the site refuse to load the articles?");
+      console.log("Next page did not load properly, did the site refuse to load the articles?");
       console.log("========================================================================================");
       console.log("");
       console.log("[Page HTML]");
       console.log(await page.content());
       console.log("");
-      test.fail();
+      if (!bypass_sorry(page,'https://news.ycombinator.com/newest?n='+article_index,10)) {
+        test.fail();
+      }
     }
     
     // Check that the needed elements for the test are loaded in and visible
@@ -225,6 +227,15 @@ async function validateArticlesOnPage(article_table, article_index, num_of_artic
   console.log("");
 
   return [article_index, newest_timestamp];
+}
+
+async function bypass_sorry(page,url,tries) {
+  let text = await page.content();
+  for (i = 0; i < tries && text.trim() === 'Sorry'; i+=1) {
+    random_delay(1000,500);
+    await page.goto(url);
+    text = await page.content();
+  }
 }
 
 /**
